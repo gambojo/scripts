@@ -5,28 +5,35 @@ if [ ! -d /mnt/mirror ]
   then mkdir /mnt/mirror
        findfs LABEL=MIRROR > /dev/null
        if [ 0 = `echo $?` ]
-          then echo -e "### Монтирование накопителя ###\n"
-               mount LABEL=MIRROR /mnt/mirror
+          then echo -e "\n### МОНТИРОВАНИЕ НАКОПИТЕЛЯ ###\n"
+               mount LABEL=MIRROR /mnt/mirror &> /dev/null
+               if [ 0 = `echo $?` ]
+                  then mount -o remount LABEL=MIRROR /mnt/mirror
+               fi
                mkdir /mnt/mirror/repo/
-          else echo -e "### Носитель отформотирован неверно, метки \"MIRROR\" не существует ###\n"
+          else echo -e "\n### НОСИТЕЛЬ ОТФОРМАТИРОВАН НЕВЕРНО, МЕТКИ \"MIRROR\" НЕ СУЩЕСТВУЕТ ###\n"
                exit 1
        fi
   else findfs LABEL=MIRROR > /dev/null
        if [ 0 = `echo $?` ]
-       then echo -e "### Монтирование накопителя ###\n"
-               mount LABEL=MIRROR /mnt/mirror
+       then echo -e "\n### МОНТИРОВАНИЕ НАКОПИТЕЛЯ ###\n"
+               mount LABEL=MIRROR /mnt/mirror &> /dev/null
+               if [ 0 = `echo $?` ]
+                  then mount -o remount LABEL=MIRROR /mnt/mirror
+               fi
                mkdir /mnt/mirror/repo/
-       else echo -e "### Носитель отформотирован неверно, метки \"MIRROR\" не существует ###\n"
+       else echo -e "\n### НОСИТЕЛЬ ОТФОРМАТИРОВАН НЕВЕРНО, МЕТКИ \"MIRROR\" НЕ СУЩЕСТВУЕТ ###\n"
             exit 1
+        fi
 fi
 
 # Создание зеркального репозитория на носителе
-echo -e "### Установка пакета для зеркалирования репозитория ###\n"
+echo -e "\n### УСТАНОВКА ПАКЕТА ДЛЯ ЗЕРКАЛИРОВАНИЯ РЕПОЗИТОРИЯ ###\n"
 apt install apt-mirror &> /dev/null
 
-echo -e "### Настройка зеркалирования ###\n"
+echo -e "\n### НАСТРОЙКА ЗЕРКАЛИРОВАНИЯ ###\n"
 mv /etc/apt/mirror.list /etc/apt/mirror.list.bak
-cat >> /etc/apt/mirror.list << EOL
+cat > /etc/apt/mirror.list << EOL
 ############# config ##################
 set base_path /mnt/mirror/repo
 set nthreads     20
@@ -49,7 +56,7 @@ clean deb [arch=amd64] http://spb99pcoapp09.gazprom-neft.local/repos/buster/debi
 clean deb [arch=amd64] http://spb99pcoapp09.gazprom-neft.local/repos/buster/third-party/
 EOL
 
-echo -e "### Запуск клонирования репозиториев ###\n"
+echo -e "\n### ЗАПУСК КЛОНИРОВАНИЯ РЕПОЗИТОРИЕВ ###\n"
 /usr/bin/apt-mirror
 
 # Скачивание сценариев обновления на носитель
@@ -81,60 +88,107 @@ EOL
 	echo "    sslCAinfo = /root/https-cert.pem" >> /root/.gitconfig
 fi
 
-echo -e "### Скачивание ролей обновления ###\n"
+echo -e "\n### СКАЧИВАНИЕ РОЛЕЙ ОБНОВЛЕНИЯ ###\n"
 cd /mnt/mirror
 git init &> /dev/null
 git clone https://spb99pcoapp09.gazprom-neft.local/git/remediations-roles &> /dev/null
 
 # Создание сценария запуска обновлений
-echo -e "### Генерация скрипта запуска обновлений (/mnt/mirror/update.sh) ###\n"
-     cat >> /mnt/mirror/update.sh << EOL
+echo -e "\n### ГЕНЕРАЦИЯ СКРИПРТА ЗАПУСКА ОБНОВЛЕНИЙ (/mnt/mirror/update.sh) ###\n"
+     cat > /mnt/mirror/update.sh << EOL
 #!/bin/bash
 
-# Переменные
-mountpoint=\$(df -Th | grep `findfs LABEL=MIRROR` | cut -d'%' -f2 | sed 's/^\s*//g')
-sources="/etc/apt/sources.list"
+# Variables
+MOUNTPOINT=\$(lsblk -P | grep MIRROR | cut -d' ' -f7 | sed -n 's/\(MOUNTPOINT=\"\)\(.*\)\(\"\)/\2/p')
+SOURCES="/etc/apt/sources.list"
+LOG="\$MOUNTPOINT/update.log"
+ANSIBLE_LOG=/var/log/ansible.log
+COUNT=grep failed \$ANSIBLE_LOG | 
 
-# Подготовка пакетного менеджера
-echo -e "### Настройка репозиториев ###\n"
+# Package manager configuration
+echo -e "\n### НАСТРОЙКА РЕПОЗИТОРИЕВ ###\n" | tee \$LOG
 
-mv \$sources \$sources.bak
-echo # KSPD REPO BEGIN > /etc/apt/sources.list
-echo # deb http://spb99pcoapp09.gazprom-neft.local/1.7_x86-64/repository-main/ 1.7_x86-64 main contrib non-free >> \$sources
-echo # deb http://spb99pcoapp09.gazprom-neft.local/1.7_x86-64/repository-update/ 1.7_x86-64 main contrib non-free >> \$sources
-echo # deb http://spb99pcoapp09.gazprom-neft.local/1.7_x86-64/repository-base/ 1.7_x86-64 main contrib non-free >> \$sources
-echo # deb http://spb99pcoapp09.gazprom-neft.local/1.7_x86-64/repository-extended/ 1.7_x86-64 main contrib non-free >> \$sources
-echo # deb [arch=amd64] http://spb99pcoapp09.gazprom-neft.local/repos/buster/debian-security/ 1.7_x86-64 main >> \$sources
-echo # deb [arch=amd64] http://spb99pcoapp09.gazprom-neft.local/repos/buster/third-party/ 1.7_x86-64 main >> \$sources
-echo # KSPD REPO END >> \$sources
-echo >> \$sources
-echo # ASTRA-LINUX REPO BEGIN >> \$sources
-echo deb https://download.astralinux.ru/astra/stable/1.7_x86-64/repository-main/ 1.7_x86-64 main contrib non-free >> \$sources
-echo deb https://download.astralinux.ru/astra/stable/1.7_x86-64/repository-update/ 1.7_x86-64 main contrib non-free >> \$sources
-echo deb https://download.astralinux.ru/astra/stable/1.7_x86-64/repository-base/ 1.7_x86-64 main contrib non-free >> \$sources
-echo deb https://download.astralinux.ru/astra/stable/1.7_x86-64/repository-extended/ 1.7_x86-64 main contrib non-free >> \$sources
-echo # ASTRA-LINUX REPO END >> \$sources
-echo >> \$sources
-echo # LOCAL REPO BEGIN >> \$sources
-echo deb file://\$mountpoint/repo/mirror/spb99pcoapp09.gazprom-neft.local/repos/buster/debian-security/ 1.7_x86-64 main >> \$sources
-echo deb file://\$mountpoint/repo/mirror/spb99pcoapp09.gazprom-neft.local/repos/buster/third-party/ 1.7_x86-64 main >> \$sources
-echo # LOCAL REPO END >> \$sources
+grep "deb file://\$MOUNTPOINT" \$SOURCES &> /dev/null
+if [ 0 != `echo \$\?` ]
+   then
+       mv \$SOURCES \$SOURCES.bak
+       echo "# KSPD REPO BEGIN" > \$SOURCES
+       echo "# deb http://spb99pcoapp09.gazprom-neft.local/1.7_x86-64/repository-main/ 1.7_x86-64 main contrib non-free" >> \$SOURCES
+       echo "# deb http://spb99pcoapp09.gazprom-neft.local/1.7_x86-64/repository-update/ 1.7_x86-64 main contrib non-free" >> \$SOURCES
+       echo "# deb http://spb99pcoapp09.gazprom-neft.local/1.7_x86-64/repository-base/ 1.7_x86-64 main contrib non-free" >> \$SOURCES
+       echo "# deb http://spb99pcoapp09.gazprom-neft.local/1.7_x86-64/repository-extended/ 1.7_x86-64 main contrib non-free" >> \$SOURCES
+       echo "# deb [arch=amd64] http://spb99pcoapp09.gazprom-neft.local/repos/buster/debian-security/ 1.7_x86-64 main" >> \$SOURCES
+       echo "# deb [arch=amd64] http://spb99pcoapp09.gazprom-neft.local/repos/buster/third-party/ 1.7_x86-64 main" >> \$SOURCES
+       echo "# KSPD REPO END" >> \$SOURCES
+       echo >> \$SOURCES
+       echo "# ASTRA-LINUX REPO BEGIN" >> \$SOURCES
+       echo "deb https://download.astralinux.ru/astra/stable/1.7_x86-64/repository-main/ 1.7_x86-64 main contrib non-free" >> \$SOURCES
+       echo "deb https://download.astralinux.ru/astra/stable/1.7_x86-64/repository-update/ 1.7_x86-64 main contrib non-free" >> \$SOURCES
+       echo "deb https://download.astralinux.ru/astra/stable/1.7_x86-64/repository-base/ 1.7_x86-64 main contrib non-free" >> \$SOURCES
+       echo "deb https://download.astralinux.ru/astra/stable/1.7_x86-64/repository-extended/ 1.7_x86-64 main contrib non-free" >> \$SOURCES
+       echo "# ASTRA-LINUX REPO END" >> \$SOURCES
+       echo >> \$SOURCES
+       echo "# LOCAL REPO BEGIN" >> \$SOURCES
+       echo "deb file://\$MOUNTPOINT/repo/mirror/spb99pcoapp09.gazprom-neft.local/repos/buster/debian-security/ 1.7_x86-64 main" >> \$SOURCES
+       echo "deb file://\$MOUNTPOINT/repo/mirror/spb99pcoapp09.gazprom-neft.local/repos/buster/third-party/ 1.7_x86-64 main" >> \$SOURCES
+       echo "# LOCAL REPO END" >> \$SOURCES
+       wget -qO - file://\$MOUNTPOINT/repo/mirror/spb99pcoapp09.gazprom-neft.local/repos/gpg.key | apt-key add -
+fi
+echo "=====================================================" >> \$LOG
+apt update >> \$LOG
 
-apt update &> /dev/null
+# System configuration to run updates
+git --version &> /dev/null
+if [ 0 != `echo \$\?` ]
+   then
+       echo -e "\n### УСТАНОВКА НЕОБХОДИМЫХ ПАКЕТОВ ###\n" | tee -a \$LOG
+       apt install -y git >> \$LOG
+       apt install -y ansible >> \$LOG
+       apt install -y python >> \$LOG
+       apt install -y openssh-server >> \$LOG
+       apt install -y dnsutils >> \$LOG
+fi
+cd \$MOUNTPOINT/remediations-roles
+echo "=====================================================" >> \$LOG
 
-# Подготовка системы к запуску обновлений
-echo -e "### Установка необходимых пакетов ###\n"
-apt install -y git &> /dev/null
-apt install -y ansible &> /dev/null
-apt install -y python &> /dev/null
-apt install -y openssh-server &> /dev/null
-apt install -y dnsutils &> /dev/null
-cd \$mountpoint/remediations-roles
+# Host section modification
+sed -i 's/\(^\s*- hosts: \)\(.*\)/\1localhost/g' ./mobile-device-offline.yml
 
-# Обновление системы
-echo -e "### Запуск обновлений ###\n"
-ansible-playbook ./mobile-device-offline.yml --connection=local -l localhost
-echo -e "### Обновление выполненно успешно ###\n"
+# Check install package
+ansible --version >> \$LOG
+if [ 0 == `echo \$\?` ]
+  # Update system
+  then echo -e "\n### ЗАПУСК ОБНОВЛЕНИЙ ###\n" | tee -a \$LOG
+       ansible-playbook ./mobile-device-offline.yml | tee -a \$LOG
+       grep failed=0 /var/log/ansible.log &> /dev/null
+       if [ 0 = `echo \$\?` ]
+          then echo -e "\n### ОБНОВЛЕНИЕ ВЫПОЛНЕНО УСПЕШНО ###\n" | tee -a \$LOG
+          else echo -e "\n### ОБНОВЛЕНИЕ ВЫПОЛНЕНО С ОШИБКАМИ СМОТРИТЕ (/var/log/ansible.log) ###\n" | tee -a \$LOG
+       fi
+  else echo -e "\n### ПРОВЕРЬТЕ СЕТЕВЫЕ СОЕДИНЕНИЯ\nИЛИ ПОПРОБУЙТЕ ЗАПУСТИТЬ СУЕНАРИЙ ЕЩЕ РАЗ ###\n" | tee -a \$LOG
+       exit 1
+fi
 EOL
 
-echo -e "### Локальный репозиторий готов к использованию ###\n"
+# Очистка системы
+echo -e "\n### ОЧСТКА СИСТЕМЫ ###\n"
+if [ /mnt/mirror = `pwd` ]
+   then cd ~
+        umount /mnt/mirror
+        df -Th | grep /mnt/mirror
+        if [ 0 != `echo $?` ]
+           then rm -rf /mnt/mirror
+        fi
+   else umount /mnt/mirror
+        df -Th | grep /mnt/mirror
+        if [ 0 != `echo $?` ]
+           then rm -rf /mnt/mirror
+        fi
+fi
+
+# Скрипт закончил свою работу
+if [ 0 = `echo $?` ]
+   then echo -e "\n### ЛОКАЛЬНЫЙ РЕПОЗИТОРИЙ ГОТОВ К ИСПОЛЬЗОВАНИЮ ###\n"
+   elif [ 0 != `echo $?` ]
+   then echo -e "\n### ЛОКАЛЬНЫЙ РЕПОЗИТОРИЙ ГОТОВ К ИСПОЛЬЗОВАНИЮ ###\n### ОШИБКА РАЗМОНТИРОВАНИЯ НАКОПИТЕЛЯ!!! ###"
+fi
