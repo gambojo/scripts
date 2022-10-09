@@ -1,22 +1,28 @@
 #!/bin/bash
 
+# Colors
+DEF='\033[0;39m'
+RED='\033[0;31m'
+YELLOW='\033[0;33m'
+
+
 # Условие для автомонтирования носителя
 if [ ! -d /mnt/mirror ]
   then mkdir /mnt/mirror
        findfs LABEL=MIRROR > /dev/null
        if [ 0 = `echo $?` ]
-          then echo -e "\n### МОНТИРОВАНИЕ НАКОПИТЕЛЯ ###\n"
+          then echo -e "\n${YELLOW}### МОНТИРОВАНИЕ НАКОПИТЕЛЯ ###\n"
                mount LABEL=MIRROR /mnt/mirror &> /dev/null
                if [ 0 = `echo $?` ]
                   then mount -o remount LABEL=MIRROR /mnt/mirror
                fi
                mkdir /mnt/mirror/repo/
-          else echo -e "\n### НОСИТЕЛЬ ОТФОРМАТИРОВАН НЕВЕРНО, МЕТКИ \"MIRROR\" НЕ СУЩЕСТВУЕТ ###\n"
+          else echo -e "\n${RED}### НОСИТЕЛЬ ОТФОРМАТИРОВАН НЕВЕРНО, МЕТКИ \"MIRROR\" НЕ СУЩЕСТВУЕТ ###\n"
                exit 1
        fi
   else findfs LABEL=MIRROR > /dev/null
        if [ 0 = `echo $?` ]
-       then echo -e "\n### МОНТИРОВАНИЕ НАКОПИТЕЛЯ ###\n"
+       then echo -e "\n${YELLOW}### МОНТИРОВАНИЕ НАКОПИТЕЛЯ ###\n"
                mount LABEL=MIRROR /mnt/mirror &> /dev/null
                if [ 0 = `echo $?` ]
                   then mount -o remount LABEL=MIRROR /mnt/mirror
@@ -28,10 +34,10 @@ if [ ! -d /mnt/mirror ]
 fi
 
 # Создание зеркального репозитория на носителе
-echo -e "\n### УСТАНОВКА ПАКЕТА ДЛЯ ЗЕРКАЛИРОВАНИЯ РЕПОЗИТОРИЯ ###\n"
+echo -e "\n${YELLOW}### УСТАНОВКА ПАКЕТА ДЛЯ ЗЕРКАЛИРОВАНИЯ РЕПОЗИТОРИЯ ###\n"
 apt install apt-mirror &> /dev/null
 
-echo -e "\n### НАСТРОЙКА ЗЕРКАЛИРОВАНИЯ ###\n"
+echo -e "\n${YELLOW}### НАСТРОЙКА ЗЕРКАЛИРОВАНИЯ ###\n"
 mv /etc/apt/mirror.list /etc/apt/mirror.list.bak
 cat > /etc/apt/mirror.list << EOL
 ############# config ##################
@@ -56,7 +62,7 @@ clean deb [arch=amd64] http://spb99pcoapp09.gazprom-neft.local/repos/buster/debi
 clean deb [arch=amd64] http://spb99pcoapp09.gazprom-neft.local/repos/buster/third-party/
 EOL
 
-echo -e "\n### ЗАПУСК КЛОНИРОВАНИЯ РЕПОЗИТОРИЕВ ###\n"
+echo -e "\n${YELLOW}### ЗАПУСК КЛОНИРОВАНИЯ РЕПОЗИТОРИЕВ ###\n"
 /usr/bin/apt-mirror
 
 # Скачивание сценариев обновления на носитель
@@ -88,13 +94,13 @@ EOL
 	echo "    sslCAinfo = /root/https-cert.pem" >> /root/.gitconfig
 fi
 
-echo -e "\n### СКАЧИВАНИЕ РОЛЕЙ ОБНОВЛЕНИЯ ###\n"
+echo -e "\n${YELLOW}### СКАЧИВАНИЕ РОЛЕЙ ОБНОВЛЕНИЯ ###\n"
 cd /mnt/mirror
 git init &> /dev/null
 git clone https://spb99pcoapp09.gazprom-neft.local/git/remediations-roles &> /dev/null
 
 # Создание сценария запуска обновлений
-echo -e "\n### ГЕНЕРАЦИЯ СКРИПРТА ЗАПУСКА ОБНОВЛЕНИЙ (/mnt/mirror/update.sh) ###\n"
+echo -e "\n${YELLOW}### ГЕНЕРАЦИЯ СКРИПРТА ЗАПУСКА ОБНОВЛЕНИЙ ${RED}(/mnt/mirror/update.sh) ${DEF}###\n"
      cat > /mnt/mirror/update.sh << EOL
 #!/bin/bash
 
@@ -102,11 +108,14 @@ echo -e "\n### ГЕНЕРАЦИЯ СКРИПРТА ЗАПУСКА ОБНОВЛЕ
 MOUNTPOINT=\$(lsblk -P | grep MIRROR | cut -d' ' -f7 | sed -n 's/\(MOUNTPOINT=\"\)\(.*\)\(\"\)/\2/p')
 SOURCES="/etc/apt/sources.list"
 LOG="\$MOUNTPOINT/update.log"
-ANSIBLE_LOG=/var/log/ansible.log
-COUNT=grep failed \$ANSIBLE_LOG | 
+
+# Colors
+DEF='\033[0;39m'
+RED='\033[0;31m'
+YELLOW='\033[0;33m'
 
 # Package manager configuration
-echo -e "\n### НАСТРОЙКА РЕПОЗИТОРИЕВ ###\n" | tee \$LOG
+echo -e "\n\${YELLOW}### НАСТРОЙКА РЕПОЗИТОРИЕВ ###\n" | tee \$LOG
 
 grep "deb file://\$MOUNTPOINT" \$SOURCES &> /dev/null
 if [ 0 != `echo \$\?` ]
@@ -141,7 +150,7 @@ apt update >> \$LOG
 git --version &> /dev/null
 if [ 0 != `echo \$\?` ]
    then
-       echo -e "\n### УСТАНОВКА НЕОБХОДИМЫХ ПАКЕТОВ ###\n" | tee -a \$LOG
+       echo -e "\n\${YELLOW}### УСТАНОВКА НЕОБХОДИМЫХ ПАКЕТОВ ###\n" | tee -a \$LOG
        apt install -y git >> \$LOG
        apt install -y ansible >> \$LOG
        apt install -y python >> \$LOG
@@ -158,20 +167,20 @@ sed -i 's/\(^\s*- hosts: \)\(.*\)/\1localhost/g' ./mobile-device-offline.yml
 ansible --version >> \$LOG
 if [ 0 == `echo \$\?` ]
   # Update system
-  then echo -e "\n### ЗАПУСК ОБНОВЛЕНИЙ ###\n" | tee -a \$LOG
+  then echo -e "\n\${YELLOW}### ЗАПУСК ОБНОВЛЕНИЙ ###\n" | tee -a \$LOG
        ansible-playbook ./mobile-device-offline.yml | tee -a \$LOG
        grep failed=0 /var/log/ansible.log &> /dev/null
        if [ 0 = `echo \$\?` ]
-          then echo -e "\n### ОБНОВЛЕНИЕ ВЫПОЛНЕНО УСПЕШНО ###\n" | tee -a \$LOG
-          else echo -e "\n### ОБНОВЛЕНИЕ ВЫПОЛНЕНО С ОШИБКАМИ СМОТРИТЕ (/var/log/ansible.log) ###\n" | tee -a \$LOG
+          then echo -e "\n\${GREEN}### ОБНОВЛЕНИЕ ВЫПОЛНЕНО УСПЕШНО ###\n" | tee -a \$LOG
+          else echo -e "\n\${RED}### ОБНОВЛЕНИЕ ВЫПОЛНЕНО С ОШИБКАМИ СМОТРИТЕ (/var/log/ansible.log) ###\n" | tee -a \$LOG
        fi
-  else echo -e "\n### ПРОВЕРЬТЕ СЕТЕВЫЕ СОЕДИНЕНИЯ\nИЛИ ПОПРОБУЙТЕ ЗАПУСТИТЬ СУЕНАРИЙ ЕЩЕ РАЗ ###\n" | tee -a \$LOG
+  else echo -e "\n\${RED}### ПРОВЕРЬТЕ СЕТЕВЫЕ СОЕДИНЕНИЯ\nИЛИ ПОПРОБУЙТЕ ЗАПУСТИТЬ СУЕНАРИЙ ЕЩЕ РАЗ ###\n" | tee -a \$LOG
        exit 1
 fi
 EOL
 
 # Очистка системы
-echo -e "\n### ОЧСТКА СИСТЕМЫ ###\n"
+echo -e "\n${YELLOW}### ОЧСТКА СИСТЕМЫ ###\n"
 if [ /mnt/mirror = `pwd` ]
    then cd ~
         umount /mnt/mirror
@@ -188,7 +197,7 @@ fi
 
 # Скрипт закончил свою работу
 if [ 0 = `echo $?` ]
-   then echo -e "\n### ЛОКАЛЬНЫЙ РЕПОЗИТОРИЙ ГОТОВ К ИСПОЛЬЗОВАНИЮ ###\n"
+   then echo -e "\n${YELLOW}### ЛОКАЛЬНЫЙ РЕПОЗИТОРИЙ ГОТОВ К ИСПОЛЬЗОВАНИЮ ###\n"
    elif [ 0 != `echo $?` ]
-   then echo -e "\n### ЛОКАЛЬНЫЙ РЕПОЗИТОРИЙ ГОТОВ К ИСПОЛЬЗОВАНИЮ ###\n### ОШИБКА РАЗМОНТИРОВАНИЯ НАКОПИТЕЛЯ!!! ###"
+   then echo -e "\n${RED}### ЛОКАЛЬНЫЙ РЕПОЗИТОРИЙ ГОТОВ К ИСПОЛЬЗОВАНИЮ ###\n### ОШИБКА РАЗМОНТИРОВАНИЯ НАКОПИТЕЛЯ!!! ###"
 fi
